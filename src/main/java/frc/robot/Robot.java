@@ -22,12 +22,27 @@ public class Robot extends TimedRobot {
   private String m_autoSelected;
   private final SendableChooser<String> m_chooser = new SendableChooser<>();
 
-  DigitalInput input = new DigitalInput(11);
-  DutyCycleEncoder encoder = new DutyCycleEncoder(input);
-  double absolutePosition = 0;
-  double absoluteDistance = 0;
-  final int printLimiterHeartbeatInterval = 500;
-  int heartbeats = 0;
+  private DigitalInput input = new DigitalInput(0);
+  private DutyCycleEncoder encoder = new DutyCycleEncoder(input);
+  private double absolutePosition = 0;
+  private double absoluteDistance = 0;
+  private final int printLimiterHeartbeatInterval = 50;
+  private int heartbeats = 0;
+
+  private enum whichDemoEnum { eLinearDistanceDemo, eAngularDistanceDemo };
+  private final whichDemoEnum theDemo = whichDemoEnum.eAngularDistanceDemo;
+
+  // Note: the REV-11-1271 has a measure accuract of about 1/10th of a degree. 
+
+  // Without encoder reset upon power up, acts as an Absolute continuous encoder for the 
+  // REV-11-1271 with REV-11-1817 configuration.  Encoder reset will make the reported net 
+  // continous distance relative to encoder position at time of the encoder reset.
+  private final Boolean demoWithReset = false;
+
+  // A setPositionOffset can be used when configured as an absolute continous encoder, to
+  // allow shifting the Distance Travelled to a more convenient zero.  Setting to the current
+  // values of the getAbsolutePosition (0..1) after power up will shift getDistance to zero.
+  private final Boolean demoSetPositionOffset = true;
 
   /**
    * This function is run when the robot is first started up and should be used for any
@@ -38,7 +53,41 @@ public class Robot extends TimedRobot {
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
     m_chooser.addOption("My Auto", kCustomAuto);
     SmartDashboard.putData("Auto choices", m_chooser);
-    encoder.setDistancePerRotation(4096.0); // 1 degree per encoder rotation
+
+    // Hex Through Bore Encoder is 4096 counts per rotation
+    switch (theDemo) {
+
+      case eLinearDistanceDemo:
+
+        // This demonstration uses the REV-11-1271 Through Bore Encoder
+        // https://www.revrobotics.com/rev-11-1271/    
+        // with the JST-PH 6-pin to 4 x 3-pin 0.1" (PWM/Dupont) Cable (REV-11-1817)
+        // to a DIO port on the RoboRIO.
+        // Review the application examples there. 
+  
+        // Set each rotation to circumference of a 4" diameter wheel, in feet.
+        // Assume the Hex Bore Encoder is on the wheel axil, thus the rest of 
+        // drive train and gears are not needed.  C = PI*d. Ft = In./12.
+        encoder.setDistancePerRotation(Math.PI*4.0/12.0); 
+        break;
+        
+      case eAngularDistanceDemo:
+
+        // This demonstration uses the REV-11-1271 Through Bore Encoder
+        // https://www.revrobotics.com/rev-11-1271/    
+        // with the JST-PH 6-pin to 4 x 3-pin 0.1" (PWM/Dupont) Cable (REV-11-1817)
+        // to a DIO port on the RoboRIO.
+        // Review the application examples there. 
+  
+        // Set each rotaton to 360 degrees, continuous (negative infinity to infinity).
+        encoder.setDistancePerRotation(360.0); 
+        break;
+    }
+
+    if (demoWithReset) encoder.reset();
+
+    if (demoSetPositionOffset) encoder.setPositionOffset(0.2457);
+
   }
 
   /**
@@ -52,9 +101,15 @@ public class Robot extends TimedRobot {
   public void robotPeriodic() {
     absolutePosition = encoder.getAbsolutePosition();
     absoluteDistance = encoder.getDistance();
-    if (heartbeats++ % printLimiterHeartbeatInterval == 0) {
-      System.out.println("Degrees: " + absoluteDistance + "  (Encoder: " + absolutePosition + ")");
-      heartbeats = 0;
+    if ((heartbeats++ % printLimiterHeartbeatInterval) == 0) {
+      switch (theDemo) {
+        case eLinearDistanceDemo:
+          System.out.println("Net Feet Travelled: " + String.format("%9.6f",absoluteDistance) + "  (Absolute Encoder: " + absolutePosition + ")");
+          break;
+        case eAngularDistanceDemo:
+          System.out.println("Net Degrees Travelled: " + String.format("%9.6f",absoluteDistance) + "  (Absolute Encoder: " + absolutePosition + ")");
+          break;
+      }
     }
   }
 
